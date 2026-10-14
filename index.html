@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P PeerText Group Chat</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- PeerJS CDN with Fallback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+    <script>
+        if (typeof Peer === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');
+        }
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.7);
+        }
+        /* Custom message background patterns */
+        .chat-bg-pattern {
+            background-image: radial-gradient(rgba(0,0,0,0.05) 1px, transparent 0);
+            background-size: 16px 16px;
+        }
+        .dark .chat-bg-pattern {
+            background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 16px 16px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 min-h-screen flex flex-col font-sans transition-colors duration-200">
+
+    <!-- App Container -->
+    <div class="flex-1 flex flex-col max-w-5xl w-full mx-auto shadow-2xl my-0 sm:my-4 rounded-none sm:rounded-2xl overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 h-screen sm:h-[92vh]">
+        
+        <!-- App Header -->
+        <header class="px-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur border-b border-gray-200 dark:border-gray-700 flex items-center justify-between z-10">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md">
+                    <i class="fa-solid font-bold text-lg fa-users"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base sm:text-lg leading-tight flex items-center gap-2">
+                        PeerText Group
+                        <span id="member-count-badge" class="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 font-semibold hidden">
+                            1 Online
+                        </span>
+                    </h1>
+                    <div id="connection-status" class="flex items-center space-x-1.5 text-xs text-amber-500 font-medium">
+                        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span id="status-text">Disconnected</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Header Action Controls -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- Sound Toggle -->
+                <button id="sound-toggle-btn" title="Toggle Sound" class="p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    <i class="fa-solid fa-volume-high text-lg"></i>
+                </button>
+                <!-- Theme Toggle -->
+                <button id="theme-toggle-btn" title="Toggle Dark/Light Mode" class="p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    <i class="fa-solid fa-moon text-lg"></i>
+                </button>
+                <!-- Room Info / Disconnect Button -->
+                <button id="room-info-btn" title="Room Details & Members" class="p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    <i class="fa-solid fa-circle-info text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Body / Chat Area -->
+        <main class="flex-1 flex flex-col relative overflow-hidden bg-slate-50 dark:bg-gray-900/50 chat-bg-pattern">
+
+            <!-- Welcome / Join Room Overlay -->
+            <div id="join-modal" class="absolute inset-0 z-20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md flex items-center justify-center p-4">
+                <div class="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-8 shadow-xl border border-gray-100 dark:border-gray-700 space-y-6">
+                    <div class="text-center space-y-2">
+                        <div class="w-16 h-16 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+                            <i class="fa-solid fa-users text-2xl"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Multi-User P2P Group Chat</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Multiple friends can join using the same Room Code. Fully peer-to-peer!</p>
+                    </div>
+
+                    <!-- Display Name Field -->
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 tracking-wider">Your Display Name</label>
+                        <input type="text" id="display-name-input" placeholder="e.g. Alex" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+
+                    <!-- Choice Tabs: Create Room / Join Room -->
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-2 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-xl">
+                            <button id="tab-create-btn" class="py-2 text-sm font-semibold rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm transition">Host Group Room</button>
+                            <button id="tab-join-btn" class="py-2 text-sm font-semibold rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">Join Group Room</button>
+                        </div>
+
+                        <!-- Panel: Create Room -->
+                        <div id="panel-create" class="space-y-4">
+                            <button id="create-room-btn" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-lg shadow-blue-500/25 transition active:scale-[0.98] flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Host New Group Room</span>
+                            </button>
+                        </div>
+
+                        <!-- Panel: Join Room -->
+                        <div id="panel-join" class="space-y-3 hidden">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 tracking-wider">Room Code</label>
+                                <input type="text" id="room-code-input" placeholder="e.g. CHAT-8391" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none uppercase transition font-mono tracking-wider">
+                            </div>
+                            <button id="join-room-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                                <span>Join Room</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Room Share Banner -->
+            <div id="host-waiting-banner" class="hidden bg-blue-50 dark:bg-blue-950/40 border-b border-blue-200 dark:border-blue-800/50 p-3 sm:p-4 text-center">
+                <div class="flex flex-col sm:flex-row items-center justify-between max-w-2xl mx-auto gap-2">
+                    <div class="flex items-center space-x-2 text-blue-800 dark:text-blue-300 text-sm">
+                        <i class="fa-solid fa-share-nodes text-blue-600"></i>
+                        <span>Room Code: <strong id="banner-room-code" class="font-mono text-base font-bold bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded">---</strong> (Share with friends)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="copy-code-btn" class="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition flex items-center space-x-1">
+                            <i class="fa-regular fa-copy"></i>
+                            <span>Copy Code</span>
+                        </button>
+                        <button id="copy-link-btn" class="px-3 py-1.5 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-lg transition flex items-center space-x-1">
+                            <i class="fa-solid fa-link"></i>
+                            <span>Copy Link</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages Log Container -->
+            <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
+                <div class="self-center my-2 max-w-sm text-center px-4 py-1.5 rounded-full bg-gray-200/60 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 text-xs">
+                    🔒 Messages are end-to-end peer direct & broadcasted to room members.
+                </div>
+            </div>
+
+            <!-- Typing Indicator Bar -->
+            <div id="typing-indicator" class="px-4 py-1.5 text-xs text-gray-500 dark:text-gray-400 italic flex items-center space-x-2 opacity-0 transition-opacity duration-200">
+                <div class="flex space-x-1 items-center">
+                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                    <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                </div>
+                <span id="typing-text">Someone is typing...</span>
+            </div>
+
+            <!-- Quick Emoji Bar -->
+            <div id="emoji-picker" class="hidden px-3 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex gap-2 overflow-x-auto">
+                <button class="emoji-btn text-xl hover:scale-125 transition">👍</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">❤️</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">😂</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">😮</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">🔥</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">🎉</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">🙏</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">👋</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">💯</button>
+                <button class="emoji-btn text-xl hover:scale-125 transition">✨</button>
+            </div>
+
+            <!-- Chat Input Controls Container -->
+            <div class="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                <div id="file-dropzone" class="hidden border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-xl p-2 text-center text-xs text-blue-600 dark:text-blue-400 mb-2 bg-blue-50 dark:bg-blue-950/30">
+                    <i class="fa-solid fa-cloud-arrow-up text-lg mr-1"></i> Drop file to attach
+                </div>
+
+                <form id="chat-form" class="flex items-center space-x-2">
+                    <input type="file" id="file-input" class="hidden">
+                    <button type="button" id="attach-btn" title="Attach Image or File" class="p-2.5 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                        <i class="fa-solid fa-paperclip text-lg"></i>
+                    </button>
+
+                    <button type="button" id="emoji-toggle-btn" title="Quick Emojis" class="p-2.5 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                        <i class="fa-regular fa-face-smile text-lg"></i>
+                    </button>
+
+                    <input type="text" id="message-input" placeholder="Type a message..." disabled class="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 border-none text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm">
+
+                    <button type="submit" id="send-btn" disabled class="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:text-gray-500 transition shadow-md shadow-blue-500/20 active:scale-95">
+                        <i class="fa-solid fa-paper-plane text-base"></i>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- Info / Room Details Modal -->
+    <div id="info-modal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center justify-between">
+                <span>Room Details</span>
+                <button id="close-info-modal-btn" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </h3>
+            <div class="space-y-3 text-sm">
+                <div>
+                    <span class="text-xs text-gray-400 uppercase font-semibold">Active Room Code</span>
+                    <div class="flex items-center justify-between mt-1 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <code id="info-room-code" class="font-mono font-bold text-blue-600 dark:text-blue-400">Not Connected</code>
+                        <button id="info-copy-code" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Copy</button>
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-400 uppercase font-semibold">Members Online</span>
+                    <ul id="members-list" class="mt-1 space-y-1 max-h-36 overflow-y-auto pr-1">
+                        <!-- Populated dynamically -->
+                    </ul>
+                </div>
+            </div>
+            <div class="pt-2">
+                <button id="disconnect-btn" class="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-xl font-medium transition text-sm">
+                    Leave Room
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script Logic -->
+    <script>
+        // Prefix for PeerJS room host ID
+        const ROOM_PREFIX = "peertext-roomcode-";
+
+        // Global State
+        let peer = null;
+        let isHost = false;
+        
+        // Host maintains connection list: peerId -> { conn, displayName }
+        let hostConnections = {}; 
+        // Guest maintains single connection to Host
+        let hostConn = null; 
+
+        let myDisplayName = localStorage.getItem('peertext_name') || "User" + Math.floor(1000 + Math.random() * 9000);
+        let myPeerId = null;
+        let activeRoomCode = "";
+        let isSoundEnabled = true;
+        let typingTimeout = null;
+        let unreadCount = 0;
+
+        // Color generator for username avatars/labels
+        const userColors = ['text-blue-500', 'text-emerald-500', 'text-amber-500', 'text-purple-500', 'text-rose-500', 'text-indigo-500', 'text-cyan-500', 'text-pink-500'];
+        function getUserColor(name) {
+            let hash = 0;
+            for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            return userColors[Math.abs(hash) % userColors.length];
+        }
+
+        // DOM Elements
+        const joinModal = document.getElementById('join-modal');
+        const displayNameInput = document.getElementById('display-name-input');
+        const tabCreateBtn = document.getElementById('tab-create-btn');
+        const tabJoinBtn = document.getElementById('tab-join-btn');
+        const panelCreate = document.getElementById('panel-create');
+        const panelJoin = document.getElementById('panel-join');
+        const createRoomBtn = document.getElementById('create-room-btn');
+        const joinRoomBtn = document.getElementById('join-room-btn');
+        const roomCodeInput = document.getElementById('room-code-input');
+        
+        const hostWaitingBanner = document.getElementById('host-waiting-banner');
+        const bannerRoomCode = document.getElementById('banner-room-code');
+        const copyCodeBtn = document.getElementById('copy-code-btn');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+
+        const messagesContainer = document.getElementById('messages-container');
+        const messageInput = document.getElementById('message-input');
+        const chatForm = document.getElementById('chat-form');
+        const sendBtn = document.getElementById('send-btn');
+        const attachBtn = document.getElementById('attach-btn');
+        const fileInput = document.getElementById('file-input');
+
+        const connectionStatus = document.getElementById('connection-status');
+        const statusText = document.getElementById('status-text');
+        const memberCountBadge = document.getElementById('member-count-badge');
+        const membersList = document.getElementById('members-list');
+
+        const soundToggleBtn = document.getElementById('sound-toggle-btn');
+        const themeToggleBtn = document.getElementById('theme-toggle-btn');
+        const roomInfoBtn = document.getElementById('room-info-btn');
+        const infoModal = document.getElementById('info-modal');
+        const closeInfoModalBtn = document.getElementById('close-info-modal-btn');
+        const infoRoomCode = document.getElementById('info-room-code');
+        const infoCopyCode = document.getElementById('info-copy-code');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+
+        const typingIndicator = document.getElementById('typing-indicator');
+        const typingText = document.getElementById('typing-text');
+        const emojiToggleBtn = document.getElementById('emoji-toggle-btn');
+        const emojiPicker = document.getElementById('emoji-picker');
+
+        // Initialize Display Name input
+        displayNameInput.value = myDisplayName;
+
+        // Sound Synthesis Utility (Web Audio API)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (!isSoundEnabled) return;
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'sent') {
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.1);
+                } else if (type === 'received') {
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(587.33, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.15);
+                } else if (type === 'join') {
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(659.25, audioCtx.currentTime + 0.2);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                }
+            } catch (e) {
+                console.error("Audio error:", e);
+            }
+        }
+
+        // Generate Random Alphanumeric Room Code
+        function generateRoomCode() {
+            const num = Math.floor(1000 + Math.random() * 9000);
+            return `CHAT-${num}`;
+        }
+
+        // Toggle Tabs
+        tabCreateBtn.addEventListener('click', () => {
+            tabCreateBtn.className = "py-2 text-sm font-semibold rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm transition";
+            tabJoinBtn.className = "py-2 text-sm font-semibold rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition";
+            panelCreate.classList.remove('hidden');
+            panelJoin.classList.add('hidden');
+        });
+
+        tabJoinBtn.addEventListener('click', () => {
+            tabJoinBtn.className = "py-2 text-sm font-semibold rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm transition";
+            tabCreateBtn.className = "py-2 text-sm font-semibold rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition";
+            panelJoin.classList.remove('hidden');
+            panelCreate.classList.add('hidden');
+        });
+
+        function updateStatus(state, label) {
+            statusText.textContent = label;
+            const indicator = connectionStatus.querySelector('span:first-child');
+            
+            if (state === 'connected') {
+                connectionStatus.className = "flex items-center space-x-1.5 text-xs text-emerald-500 font-medium";
+                indicator.className = "w-2 h-2 rounded-full bg-emerald-500";
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+            } else if (state === 'connecting') {
+                connectionStatus.className = "flex items-center space-x-1.5 text-xs text-amber-500 font-medium";
+                indicator.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+            } else {
+                connectionStatus.className = "flex items-center space-x-1.5 text-xs text-rose-500 font-medium";
+                indicator.className = "w-2 h-2 rounded-full bg-rose-500";
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+            }
+        }
+
+        function copyToClipboard(text, successMessage) {
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showNotification(successMessage || "Copied to clipboard!");
+        }
+
+        function showNotification(msg) {
+            const toast = document.createElement('div');
+            toast.className = "fixed bottom-5 right-5 z-50 bg-gray-900 text-white px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium animate-bounce";
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        }
+
+        // Host Creation
+        createRoomBtn.addEventListener('click', () => {
+            saveDisplayName();
+            const code = generateRoomCode();
+            activeRoomCode = code;
+            isHost = true;
+            initPeer(ROOM_PREFIX + code);
+        });
+
+        // Guest Join
+        joinRoomBtn.addEventListener('click', () => {
+            saveDisplayName();
+            let code = roomCodeInput.value.trim().toUpperCase();
+            if (!code) {
+                showNotification("Please enter a valid room code.");
+                return;
+            }
+            activeRoomCode = code;
+            isHost = false;
+            initPeer(null, ROOM_PREFIX + code);
+        });
+
+        function saveDisplayName() {
+            const val = displayNameInput.value.trim();
+            if (val) {
+                myDisplayName = val;
+                localStorage.setItem('peertext_name', myDisplayName);
+            }
+        }
+
+        function initPeer(customPeerId, targetHostId = null) {
+            if (typeof Peer === 'undefined') {
+                showNotification("PeerJS library missing. Check internet connection.");
+                return;
+            }
+
+            updateStatus('connecting', 'Connecting to network...');
+            joinModal.classList.add('hidden');
+
+            const peerConfig = {
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+    }
+};
+peer = customPeerId ? new Peer(customPeerId, peerConfig) : new Peer(peerConfig);
+
+            peer.on('open', (id) => {
+                myPeerId = id;
+                infoRoomCode.textContent = activeRoomCode;
+
+                if (isHost) {
+                    updateStatus('connected', 'Room Ready (Hosting)');
+                    bannerRoomCode.textContent = activeRoomCode;
+                    hostWaitingBanner.classList.remove('hidden');
+                    updateMembersUI();
+                } else if (targetHostId) {
+                    updateStatus('connecting', 'Joining group room...');
+                    connectToHost(targetHostId);
+                }
+            });
+
+            // If hosting, handle incoming client connections
+            peer.on('connection', (conn) => {
+                if (!isHost) return;
+
+                conn.on('open', () => {
+                    hostConnections[conn.peer] = { conn: conn, displayName: "Guest" };
+                    setupHostDataListener(conn);
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error("PeerJS Error:", err);
+                if (err.type === 'unavailable-id') {
+                    showNotification("Room code occupied. Please try another code or host a new room.");
+                } else {
+                    showNotification("Connection error: " + err.type);
+                }
+                updateStatus('disconnected', 'Disconnected');
+                joinModal.classList.remove('hidden');
+            });
+        }
+
+        // Guest connects to Host
+        function connectToHost(targetHostId) {
+            hostConn = peer.connect(targetHostId);
+
+            hostConn.on('open', () => {
+                updateStatus('connected', 'Connected');
+                hostWaitingBanner.classList.add('hidden');
+
+                // Send handshake with display name to host
+                hostConn.send({
+                    type: 'handshake',
+                    displayName: myDisplayName
+                });
+                playSound('join');
+            });
+
+            hostConn.on('data', (data) => {
+                handleIncomingPayload(data);
+            });
+
+            hostConn.on('close', () => {
+                updateStatus('disconnected', 'Host closed room');
+                appendSystemMessage("Room host has disconnected.");
+            });
+        }
+
+        // Host receives payload from a guest, handles it, and broadcasts to ALL other guests
+        function setupHostDataListener(conn) {
+            conn.on('data', (data) => {
+                if (!data) return;
+
+                if (data.type === 'handshake') {
+                    const guestName = data.displayName || "Friend";
+                    hostConnections[conn.peer].displayName = guestName;
+                    
+                    // Announce join
+                    broadcastPayload({
+                        type: 'system',
+                        message: `${guestName} joined the group!`
+                    }, null);
+
+                    appendSystemMessage(`${guestName} joined the group!`);
+                    playSound('join');
+                    syncMemberListToGuests();
+                    updateMembersUI();
+                    return;
+                }
+
+                // Broadcast text, files, and typing events to everyone else
+                broadcastPayload(data, conn.peer);
+
+                // Host handles the message locally
+                handleIncomingPayload(data);
+            });
+
+            conn.on('close', () => {
+                const disconnectedGuest = hostConnections[conn.peer]?.displayName || "A user";
+                delete hostConnections[conn.peer];
+                
+                broadcastPayload({
+                    type: 'system',
+                    message: `${disconnectedGuest} left the group.`
+                }, null);
+
+                appendSystemMessage(`${disconnectedGuest} left the group.`);
+                syncMemberListToGuests();
+                updateMembersUI();
+            });
+        }
+
+        // Host distributes payload to all active client connections
+        function broadcastPayload(payload, excludePeerId = null) {
+            if (!isHost) return;
+            Object.keys(hostConnections).forEach(peerId => {
+                if (peerId !== excludePeerId) {
+                    const client = hostConnections[peerId];
+                    if (client && client.conn && client.conn.open) {
+                        client.conn.send(payload);
+                    }
+                }
+            });
+        }
+
+        // Host sends updated member list to all participants
+        function syncMemberListToGuests() {
+            if (!isHost) return;
+            const names = [myDisplayName, ...Object.values(hostConnections).map(c => c.displayName)];
+            broadcastPayload({
+                type: 'member-list',
+                members: names
+            });
+        }
+
+        function handleIncomingPayload(data) {
+            if (!data || typeof data !== 'object') return;
+
+            switch (data.type) {
+                case 'member-list':
+                    renderMembersList(data.members);
+                    break;
+
+                case 'system':
+                    appendSystemMessage(data.message);
+                    break;
+
+                case 'text':
+                    appendMessage({
+                        sender: data.sender,
+                        text: data.text,
+                        time: data.time,
+                        isSelf: false
+                    });
+                    playSound('received');
+                    handleUnreadNotification();
+                    break;
+
+                case 'file':
+                    appendFileMessage({
+                        sender: data.sender,
+                        fileName: data.fileName,
+                        fileType: data.fileType,
+                        fileData: data.fileData,
+                        time: data.time,
+                        isSelf: false
+                    });
+                    playSound('received');
+                    handleUnreadNotification();
+                    break;
+
+                case 'typing':
+                    if (data.isTyping) {
+                        typingText.textContent = `${data.sender} is typing...`;
+                        typingIndicator.classList.remove('opacity-0');
+                    } else {
+                        typingIndicator.classList.add('opacity-0');
+                    }
+                    break;
+            }
+        }
+
+        function updateMembersUI() {
+            if (!isHost) return;
+            const names = [myDisplayName + " (Host)", ...Object.values(hostConnections).map(c => c.displayName)];
+            renderMembersList(names);
+        }
+
+        function renderMembersList(list) {
+            membersList.innerHTML = '';
+            memberCountBadge.textContent = `${list.length} Online`;
+            memberCountBadge.classList.remove('hidden');
+
+            list.forEach(name => {
+                const li = document.createElement('li');
+                li.className = "flex items-center space-x-2 py-1 text-xs text-gray-700 dark:text-gray-300 font-medium";
+                li.innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="${getUserColor(name)} font-semibold">${name}</span>
+                `;
+                membersList.appendChild(li);
+            });
+        }
+
+        function handleUnreadNotification() {
+            if (document.hidden) {
+                unreadCount++;
+                document.title = `(${unreadCount}) PeerText Group`;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                unreadCount = 0;
+                document.title = "P2P PeerText Group Chat";
+            }
+        });
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const payload = {
+                type: 'text',
+                sender: myDisplayName,
+                text: text,
+                time: timeStr
+            };
+
+            if (isHost) {
+                broadcastPayload(payload);
+            } else if (hostConn && hostConn.open) {
+                hostConn.send(payload);
+            }
+
+            // Render locally for sender
+            appendMessage({
+                sender: myDisplayName,
+                text: text,
+                time: timeStr,
+                isSelf: true
+            });
+
+            messageInput.value = '';
+            sendTypingStatus(false);
+            playSound('sent');
+        });
+
+        // Typing event sender
+        messageInput.addEventListener('input', () => {
+            sendTypingStatus(true);
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => sendTypingStatus(false), 2000);
+        });
+
+        function sendTypingStatus(isTyping) {
+            const payload = {
+                type: 'typing',
+                sender: myDisplayName,
+                isTyping: isTyping
+            };
+
+            if (isHost) {
+                broadcastPayload(payload);
+            } else if (hostConn && hostConn.open) {
+                hostConn.send(payload);
+            }
+        }
+
+        // Render Text Message Bubble
+        function appendMessage({ sender, text, time, isSelf }) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex flex-col ${isSelf ? 'items-end' : 'items-start'} my-1`;
+
+            const colorClass = getUserColor(sender);
+
+            const bubble = document.createElement('div');
+            bubble.className = `max-w-[80%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm break-words shadow-sm ${
+                isSelf 
+                    ? 'bg-blue-600 text-white rounded-br-xs' 
+                    : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-xs border border-gray-100 dark:border-gray-600'
+            }`;
+
+            // Add username heading above received message
+            if (!isSelf) {
+                const nameLabel = document.createElement('div');
+                nameLabel.className = `text-xs font-bold ${colorClass} mb-0.5`;
+                nameLabel.textContent = sender;
+                bubble.appendChild(nameLabel);
+            }
+
+            const textSpan = document.createElement('div');
+            textSpan.textContent = text;
+            bubble.appendChild(textSpan);
+
+            const meta = document.createElement('div');
+            meta.className = "flex items-center space-x-1 mt-1 text-[10px] text-gray-400 px-1";
+            meta.innerHTML = `<span>${isSelf ? 'You' : sender}</span> • <span>${time}</span>`;
+
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(meta);
+            messagesContainer.appendChild(wrapper);
+
+            scrollToBottom();
+        }
+
+        // Render File/Image Bubble
+        function appendFileMessage({ sender, fileName, fileType, fileData, time, isSelf }) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex flex-col ${isSelf ? 'items-end' : 'items-start'} my-1`;
+
+            const colorClass = getUserColor(sender);
+
+            const bubble = document.createElement('div');
+            bubble.className = `max-w-[80%] sm:max-w-[70%] p-2.5 rounded-2xl text-sm shadow-sm ${
+                isSelf 
+                    ? 'bg-blue-600 text-white rounded-br-xs' 
+                    : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-xs border border-gray-100 dark:border-gray-600'
+            }`;
+
+            if (!isSelf) {
+                const nameLabel = document.createElement('div');
+                nameLabel.className = `text-xs font-bold ${colorClass} mb-1`;
+                nameLabel.textContent = sender;
+                bubble.appendChild(nameLabel);
+            }
+
+            if (fileType.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = fileData;
+                img.alt = fileName;
+                img.className = "max-w-full max-h-60 rounded-lg object-cover cursor-pointer";
+                img.onclick = () => window.open(fileData, '_blank');
+                bubble.appendChild(img);
+            } else {
+                const fileBox = document.createElement('a');
+                fileBox.href = fileData;
+                fileBox.download = fileName;
+                fileBox.className = "flex items-center space-x-3 p-2 bg-black/5 dark:bg-white/5 rounded-xl hover:bg-black/10 transition";
+                fileBox.innerHTML = `
+                    <div class="p-2 bg-blue-500 text-white rounded-lg"><i class="fa-solid fa-file"></i></div>
+                    <div class="overflow-hidden text-xs">
+                        <p class="font-semibold truncate">${fileName}</p>
+                        <p class="text-[10px] opacity-75">Click to download</p>
+                    </div>
+                `;
+                bubble.appendChild(fileBox);
+            }
+
+            const meta = document.createElement('div');
+            meta.className = "flex items-center space-x-1 mt-1 text-[10px] text-gray-400 px-1";
+            meta.innerHTML = `<span>${isSelf ? 'You' : sender}</span> • <span>${time}</span>`;
+
+            wrapper.appendChild(bubble);
+            wrapper.appendChild(meta);
+            messagesContainer.appendChild(wrapper);
+
+            scrollToBottom();
+        }
+
+        function appendSystemMessage(msg) {
+            const div = document.createElement('div');
+            div.className = "self-center my-2 max-w-sm text-center px-3 py-1 rounded-full bg-gray-200/80 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 text-xs font-medium";
+            div.textContent = msg;
+            messagesContainer.appendChild(div);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        attachBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processAndSendFile(file);
+        });
+
+        function processAndSendFile(file) {
+            if (file.size > 10 * 1024 * 1024) {
+                showNotification("File limit is 10MB.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const base64Data = evt.target.result;
+                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                const payload = {
+                    type: 'file',
+                    sender: myDisplayName,
+                    fileName: file.name,
+                    fileType: file.type,
+                    fileData: base64Data,
+                    time: timeStr
+                };
+
+                if (isHost) {
+                    broadcastPayload(payload);
+                } else if (hostConn && hostConn.open) {
+                    hostConn.send(payload);
+                }
+
+                appendFileMessage({
+                    sender: myDisplayName,
+                    fileName: file.name,
+                    fileType: file.type,
+                    fileData: base64Data,
+                    time: timeStr,
+                    isSelf: true
+                });
+
+                playSound('sent');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        const dropzone = document.getElementById('file-dropzone');
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('hidden');
+        });
+
+        window.addEventListener('dragleave', (e) => {
+            if (e.clientX === 0 && e.clientY === 0) dropzone.classList.add('hidden');
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('hidden');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                processAndSendFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Quick Emojis
+        emojiToggleBtn.addEventListener('click', () => emojiPicker.classList.toggle('hidden'));
+        document.querySelectorAll('.emoji-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                messageInput.value += btn.textContent;
+                messageInput.focus();
+            });
+        });
+
+        // Copy buttons
+        copyCodeBtn.addEventListener('click', () => copyToClipboard(activeRoomCode, "Room code copied!"));
+        copyLinkBtn.addEventListener('click', () => {
+            const link = `${window.location.origin}${window.location.pathname}?room=${activeRoomCode}`;
+            copyToClipboard(link, "Invite link copied!");
+        });
+        infoCopyCode.addEventListener('click', () => copyToClipboard(activeRoomCode, "Room code copied!"));
+
+        // Theme and audio toggles
+        themeToggleBtn.addEventListener('click', () => document.documentElement.classList.toggle('dark'));
+        soundToggleBtn.addEventListener('click', () => {
+            isSoundEnabled = !isSoundEnabled;
+            soundToggleBtn.innerHTML = isSoundEnabled 
+                ? '<i class="fa-solid fa-volume-high text-lg"></i>' 
+                : '<i class="fa-solid fa-volume-xmark text-lg text-rose-500"></i>';
+            showNotification(isSoundEnabled ? "Sound enabled" : "Sound muted");
+        });
+
+        // Modals
+        roomInfoBtn.addEventListener('click', () => infoModal.classList.remove('hidden'));
+        closeInfoModalBtn.addEventListener('click', () => infoModal.classList.add('hidden'));
+
+        disconnectBtn.addEventListener('click', () => {
+            if (peer) peer.destroy();
+            location.reload();
+        });
+
+        // Auto join via URL string ?room=CODE
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('room');
+            if (roomParam) {
+                tabJoinBtn.click();
+                roomCodeInput.value = roomParam.toUpperCase();
+            }
+        });
+    </script>
+</body>
+</html>
